@@ -1,10 +1,13 @@
 import os
 import pandas as pd
 import streamlit as st
+import numpy as np
 import plotly.express as px
+from scipy.stats import gaussian_kde
 from sklearn.linear_model import LogisticRegression
 
-from style import CSS, HERO, BRAND, ABOUT, FILTERS_TITLE, team_title, kpi_card, insight, note, ORANGE, BLUE
+from style import (CSS, HERO, BRAND, ABOUT, FILTERS_TITLE, team_title, kpi_card, insight, note,
+                   PLAN_TITLE, result_card, result_card_empty, ORANGE, BLUE)
 
 # ---------- Page settings ----------
 st.set_page_config(page_title="Summit Planner", page_icon="🏔️", layout="wide")
@@ -32,7 +35,7 @@ df = load_data()
 # ---------- Model ----------
 @st.cache_resource
 def train_model(data):
-    X = data[["oxygen_used", "members", "hired_staff", "height_m", "season", "commercial_route"]].copy()
+    X = data[["oxygen_used", "members", "hired_staff", "height_m", "season"]].copy()
     X["height_m"] = X["height_m"] / 1000          # height in km
     X = pd.get_dummies(X, columns=["season"])     # season → columns
     y = data["success"]
@@ -45,10 +48,25 @@ model, model_columns = train_model(df)
 
 
 # show a plotly chart with the numbers written straight, outside the bars
+# One look for all charts: fonts, light grid, rounded bars, white background
 def show_chart(fig):
     if fig.data and fig.data[0].type == "bar":
-        fig.update_traces(textangle=0, textposition="outside", cliponaxis=False)
-    st.plotly_chart(fig, use_container_width=True)
+        fig.update_traces(textangle=0, textposition="outside", cliponaxis=False,
+                          textfont=dict(size=13, color="#13202F"))
+    fig.update_layout(
+        font=dict(family="Source Sans 3, sans-serif", size=13, color="#607086"),
+        title=dict(font=dict(family="Fraunces, serif", size=18, color="#13202F"), x=0, xanchor="left"),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=10, r=20, t=90, b=10),
+        barcornerradius=6,
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Source Sans 3, sans-serif"),
+        legend=dict(orientation="h", y=1.0, x=0, xanchor="left", yanchor="bottom", title=""),  # under the title
+    )
+    fig.update_xaxes(showgrid=False, showline=False, zeroline=False)
+    fig.update_yaxes(gridcolor="#EEF1F5", showline=False, zeroline=False)
+    # hide the toolbar (zoom, camera...) so it does not cover the title
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 # ---------- Sidebar ----------
 st.sidebar.markdown(BRAND, unsafe_allow_html=True)
@@ -151,10 +169,8 @@ col2.markdown(kpi_card("SUCCESS RATE", f"{success:.0f}%", sub2, "#2E8B6A"), unsa
 col3.markdown(kpi_card("DEATH RISK", f"{death:.1f}%", sub3, "#C2483A"), unsafe_allow_html=True)
 col4.markdown(kpi_card("OXYGEN USE", f"{oxygen_share:.0f}%", sub4, BLUE), unsafe_allow_html=True)
 
-st.divider()
-
 # ---------- Tabs ----------
-tab1, tab2, tab3 = st.tabs(["📊 Overview", "🧗 Check my plan", "🗂 Data"])
+tab1, tab2, tab3 = st.tabs(["Overview", "Check my plan", "Data"])
 
 # ===== Tab 1: Overview =====
 with tab1:
@@ -188,6 +204,33 @@ with tab1:
         else:
             st.markdown(insight("—", "Only one height group with these filters, so we can't compare.", "#C2483A"),
                         unsafe_allow_html=True)
+
+        # where do people climb? (height distribution, full width)
+        # same histogram as in the notebook (20 bins, black edges, kde line), but interactive
+        heights = filtered["height_m"]
+        bin_size = (heights.max() - heights.min()) / 20
+        if bin_size == 0:               # only one mountain height in the filter
+            bin_size = 100
+
+        fig = px.histogram(filtered, x="height_m", title="Height Distribution of the Mountains",
+                           color_discrete_sequence=[BLUE])
+        fig.update_traces(xbins=dict(start=heights.min(), end=heights.max() + bin_size, size=bin_size),
+                          marker_line_color="black", marker_line_width=1, opacity=0.6)
+
+        # kde line (smooth curve), scaled to the number of expeditions
+        if heights.nunique() > 1:
+            kde = gaussian_kde(heights)
+            x_line = np.linspace(heights.min(), heights.max(), 200)
+            y_line = kde(x_line) * len(heights) * bin_size
+            fig.add_scatter(x=x_line, y=y_line, mode="lines", line=dict(color=BLUE, width=3),
+                            name="KDE", hoverinfo="skip")
+
+        fig.update_layout(xaxis_title="Height m", yaxis_title="Number of Expeditions", showlegend=False,
+                          bargap=0)
+        show_chart(fig)
+        st.markdown(note("The distribution shows two groups of mountains: the first is around 6,000–7,500 m and "
+                         "the second is above 8,000 m, with almost no expeditions in between. More than half of "
+                         "the expeditions (54%) are on mountains above 8,000 m."), unsafe_allow_html=True)
 
         left, right = st.columns(2)
         with left:
@@ -394,7 +437,7 @@ with tab1:
             reasons = reasons.sort_values("trips")
             fig = px.bar(reasons, x="trips", y="reason", orientation="h", text_auto=True,
                          title="Why Expeditions Failed", color_discrete_sequence=["#C2483A"])
-            fig.update_layout(xaxis_title="Number of Expeditions", yaxis_title="Reason", height=500)
+            fig.update_layout(xaxis_title="Number of Expeditions", yaxis_title="", height=500)
             show_chart(fig)
         st.markdown(note("About half of the failed expeditions (132 of 257) failed because of nature: bad weather "
                          "or bad conditions. \"Success (subpeak)\" means the team reached a lower summit, not the "
@@ -438,26 +481,37 @@ with tab1:
 
 # ===== Tab 2: Check my plan =====
 with tab2:
-    st.subheader("🧗 Check my plan")
+    st.subheader("Check my plan")
     st.write("Enter your planned expedition and compare it with 868 past expeditions.")
 
-    left, right = st.columns(2)
+    left, right = st.columns([1.1, 1])
 
-    # ---- Inputs ----
+    # ---- Left: the plan (white card) ----
     with left:
         with st.form("plan_form"):
-            p_mountain = st.selectbox("Mountain", list(df["peak"].value_counts().index))
-            p_season = st.selectbox("Season", ["Spring", "Summer", "Autumn", "Winter"])
-            p_members = st.number_input("Team size (climbers)", min_value=1, max_value=40, value=6)
-            p_staff = st.number_input("Hired staff", min_value=0, max_value=60, value=5)
-            p_oxygen = st.checkbox("I will use supplemental oxygen", value=True)
-            p_route = st.checkbox("Commercial route", value=True)
-            submitted = st.form_submit_button("Check my plan →")
+            st.markdown(PLAN_TITLE, unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            p_mountain = c1.selectbox("Mountain", list(df["peak"].value_counts().index))
+            p_season = c2.selectbox("Season", ["Spring", "Summer", "Autumn", "Winter"])
+            p_members = c1.number_input("Team size (climbers)", min_value=1, max_value=40, value=8)
+            p_staff = c2.number_input("Hired staff", min_value=0, max_value=60, value=10)
 
-    # ---- Result ----
+            # companies with 5 or more trips (sorted by number of trips)
+            company_counts = df[df["agency"] != "Unknown"]["agency"].value_counts()
+            companies = ["Not decided yet"] + list(company_counts[company_counts >= 5].index)
+            p_company = c1.selectbox("Company", companies)
+
+            p_oxygen = st.toggle("I will use supplemental oxygen", value=True)
+            submitted = st.form_submit_button("Check my plan →", type="primary")
+
+    # keep the result on the page after the first click
+    if submitted:
+        st.session_state["checked"] = True
+
+    # ---- Right: the result (dark card) ----
     with right:
-        if not submitted:
-            st.info("Fill in your plan and press **Check my plan**.")
+        if not st.session_state.get("checked", False):
+            st.markdown(result_card_empty(), unsafe_allow_html=True)
         else:
             height = df[df["peak"] == p_mountain]["height_m"].iloc[0]
 
@@ -468,44 +522,61 @@ with tab2:
                 "hired_staff": [p_staff],
                 "height_m": [height / 1000],
                 "season": [p_season],
-                "commercial_route": [p_route],
             })
             plan = pd.get_dummies(plan, columns=["season"])
             plan = plan.reindex(columns=model_columns, fill_value=0)
             chance = model.predict_proba(plan)[0][1] * 100
 
-            st.metric("Estimated chance of success", f"{chance:.0f}%")
-            st.progress(int(chance))
+            # 2) tips: (type, text)   type = "good", "warn" or "bad"
+            tips = []
+            if height >= 8000 and p_oxygen:
+                tips.append(("good", "Oxygen planned: 89% success above 8,000 m vs 14% without"))
+            if height >= 8000 and not p_oxygen:
+                tips.append(("bad", "No oxygen above 8,000 m: only 14% succeeded (vs 89% with oxygen)"))
 
-            # 2) similar past trips
-            peak_trips = df[df["peak"] == p_mountain]
-            similar = peak_trips[(peak_trips["season"] == p_season) & (peak_trips["oxygen_used"] == p_oxygen)]
-
-            st.write(f"**{p_mountain}** · {height} m")
-            if len(similar) > 0:
-                st.write(f"Similar past trips (same mountain, season and oxygen): **{len(similar)}**, "
-                         f"and **{similar['success'].mean() * 100:.0f}%** reached the summit.")
+            if p_season == "Spring":
+                tips.append(("good", "Spring is the most successful season (76%)"))
+            elif p_season == "Autumn":
+                tips.append(("good", "Autumn is the second best season (66%)"))
+            elif p_season == "Winter":
+                tips.append(("bad", "Winter is the hardest season: only 33% success"))
             else:
-                st.write("No similar past trips in the data.")
+                tips.append(("warn", "Very few expeditions climb in summer (only 5 trips)"))
 
+            if p_staff == 0:
+                tips.append(("warn", "Teams without hired staff succeeded only 43% of the time"))
+
+            peak_trips = df[df["peak"] == p_mountain]
             trip_days = peak_trips["total_days"].median()
             if not pd.isna(trip_days):
-                st.write(f"Typical trip length on {p_mountain}: **{trip_days:.0f} days**")
+                tips.append(("warn", f"Plan about {trip_days:.0f} days: the typical {p_mountain} trip"))
 
-            # 3) tips from the EDA
-            st.markdown("**Tips**")
-            if height >= 8000 and not p_oxygen:
-                st.error("Above 8,000 m, only 14% of expeditions without oxygen succeeded (vs 89% with oxygen).")
-            if p_season == "Spring":
-                st.success("Spring is the most successful season (76%).")
-            if p_season == "Winter":
-                st.warning("Winter is the hardest season: only 33% success.")
-            if p_staff == 0:
-                st.warning("Expeditions without hired staff succeeded only 43% of the time.")
+            similar = peak_trips[(peak_trips["season"] == p_season) & (peak_trips["oxygen_used"] == p_oxygen)]
+            if len(similar) >= 5:
+                tips.append(("good", f"{len(similar)} similar past trips: {similar['success'].mean() * 100:.0f}% reached the summit"))
+            elif len(similar) > 0:
+                tips.append(("warn", f"Only {len(similar)} similar past trip(s), so we can't compare much"))
+
+            if p_company != "Not decided yet":
+                trips = df[df["agency"] == p_company]
+                tips.append(("good", f"{p_company}: {len(trips)} past trips, {trips['success'].mean() * 100:.0f}% "
+                                     f"reached the summit, {trips['any_death'].mean() * 100:.0f}% had a death"))
+
             if height >= 8000:
-                st.warning("8,000 m peaks are riskier: 7.2% of expeditions there had a death.")
+                tips.append(("bad", "8,000 m peaks are riskier: 7.2% of trips had a death"))
 
-            st.caption("Estimate from a logistic regression model trained on past expeditions. Not a guarantee.")
+            # short description of the plan
+            if height >= 8000:
+                peak_type = "8,000 m peak"
+            else:
+                peak_type = "peak under 8,000 m"
+            if p_oxygen:
+                oxygen_text = "oxygen"
+            else:
+                oxygen_text = "no oxygen"
+            description = f"{peak_type}, {p_season.lower()}, {oxygen_text}, {p_staff} hired staff"
+
+            st.markdown(result_card(chance, description, tips), unsafe_allow_html=True)
 
 # ===== Tab 3: Data =====
 with tab3:

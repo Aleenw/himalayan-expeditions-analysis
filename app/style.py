@@ -35,6 +35,28 @@ h1, h2, h3 { font-family: 'Fraunces', serif !important; color: #13202F; }
 [data-testid="stSidebar"] [data-testid="stSliderTickBarMin"],
 [data-testid="stSidebar"] [data-testid="stSliderTickBarMax"] { display: none !important; }
 
+/* Charts inside white cards */
+[data-testid="stPlotlyChart"] {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E7EE;
+    border-radius: 14px;
+    padding: 8px 8px 0 8px;
+}
+
+/* Tabs: bigger text (only the tab names, not the question buttons) */
+[data-testid="stTabs"] [role="tab"] p { font-size: 18px; }
+
+/* Space between the KPI cards and the tabs */
+[data-testid="stTabs"] { margin-top: 32px; }
+
+/* Check my plan: the form is a white card */
+[data-testid="stForm"] {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E7EE !important;
+    border-radius: 16px;
+    padding: 24px;
+}
+
 /* KPI cards */
 [data-testid="stMetric"] {
     background-color: #FFFFFF;
@@ -134,6 +156,71 @@ def note(text):
 <div style="background-color:#EEF1F5; border-radius:10px; padding:12px 16px; margin:0 0 16px 0;">
 <p style="font-size:11px; font-weight:700; letter-spacing:1.5px; color:#607086; margin:0 0 4px 0;">FROM MY ANALYSIS (ALL 868 EXPEDITIONS)</p>
 <p style="font-size:14px; color:#13202F; line-height:1.5; margin:0;">{text}</p>
+</div>
+"""
+
+
+# "YOUR PLAN" title inside the form
+PLAN_TITLE = """
+<p style="color:#E07A3F; font-weight:700; letter-spacing:3px; font-size:13px; margin:0 0 4px 0;">YOUR PLAN</p>
+"""
+
+
+# Dark result card before the climber presses the button
+def result_card_empty():
+    return """
+<div style="background-color:#0E1A2B; border-radius:16px; padding:28px; min-height:420px;">
+<p style="color:#F2B35B; font-weight:700; letter-spacing:3px; font-size:13px; margin:0;">ESTIMATED CHANCE OF SUCCESS</p>
+<p style="font-family:Fraunces, serif; font-size:24px; color:#FFFFFF; margin:60px 0 8px 0;">Your result will appear here</p>
+<p style="color:#A9B6C8; font-size:15px; margin:0;">Fill in your plan and press <b>Check my plan</b>.</p>
+</div>
+"""
+
+
+# Dark result card: ring with the chance, a short text and the tips
+def result_card(chance, description, tips):
+    length = 364 * chance / 100          # 364 = length of the full circle
+    if chance >= 70:
+        label = "High chance"
+        meaning = "usually reach the summit."
+    elif chance >= 45:
+        label = "Medium chance"
+        meaning = "succeed about half of the time."
+    else:
+        label = "Low chance"
+        meaning = "often do not reach the summit."
+
+    # one row for each tip, with a colored circle
+    colors = {"good": "#2E8B6A", "warn": "#F2B35B", "bad": "#C2483A"}
+    signs = {"good": "✓", "warn": "!", "bad": "!"}
+    rows = ""
+    for kind, text in tips:
+        rows += f"""<div style="display:flex; align-items:center; gap:12px; margin:10px 0;">
+<span style="background-color:{colors[kind]}; color:#FFFFFF; border-radius:50%; width:24px; height:24px; min-width:24px;
+display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;">{signs[kind]}</span>
+<span style="color:#E8ECF2; font-size:15px;">{text}</span></div>"""
+
+    return f"""
+<div style="background-color:#0E1A2B; border-radius:16px; padding:28px;">
+<p style="color:#F2B35B; font-weight:700; letter-spacing:3px; font-size:13px; margin:0 0 16px 0;">ESTIMATED CHANCE OF SUCCESS</p>
+<div style="display:flex; align-items:center; gap:28px;">
+<div style="position:relative; width:150px; height:150px; min-width:150px;">
+<svg width="150" height="150" viewBox="0 0 140 140">
+<circle cx="70" cy="70" r="58" fill="none" stroke="#2A3D57" stroke-width="12"/>
+<circle cx="70" cy="70" r="58" fill="none" stroke="#E07A3F" stroke-width="12" stroke-linecap="round"
+stroke-dasharray="{length:.0f} 364" transform="rotate(-90 70 70)"/>
+</svg>
+<p style="position:absolute; top:50%; left:0; right:0; transform:translateY(-50%); margin:0; text-align:center;
+font-family:Fraunces, serif; font-size:38px; font-weight:600; color:#FFFFFF;">{chance:.0f}%</p>
+</div>
+<div>
+<p style="font-family:Fraunces, serif; font-size:28px; font-weight:600; color:#FFFFFF; margin:0 0 6px 0;">{label}</p>
+<p style="color:#A9B6C8; font-size:15px; line-height:1.5; margin:0;">Plans like yours ({description}) {meaning}</p>
+</div>
+</div>
+<div style="height:1px; background-color:#2A3D57; margin:22px 0 10px 0;"></div>
+{rows}
+<p style="color:#7F8EA3; font-size:12px; margin:16px 0 0 0;">Estimate from a logistic regression model (accuracy about 76%). Not a guarantee.</p>
 </div>
 """
 
