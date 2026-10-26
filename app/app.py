@@ -570,18 +570,27 @@ with tab2:
 
 # ===== Tab 3: Data =====
 with tab3:
-    st.subheader("🗂 Data preview")
+    st.subheader("Data preview")
     st.write(f"Showing **{len(filtered)}** expeditions after filters (out of {len(df)}).")
 
-    columns = ["peak", "year", "season", "height_m", "members", "hired_staff",
-               "oxygen_used", "commercial_route", "agency", "success", "total_days"]
+    # all the columns of the clean data (without the helper columns made in the app)
+    helper_columns = ["any_death", "height_group", "team_size"]
+    columns = [col for col in filtered.columns if col not in helper_columns]
     st.dataframe(filtered[columns], use_container_width=True, hide_index=True)
 
-    st.subheader("📈 Summary statistics")
-    st.dataframe(filtered[["height_m", "members", "hired_staff", "total_days"]].describe().round(1),
-                 use_container_width=True)
+    st.subheader("Summary statistics")
 
-    st.download_button("⬇️ Download filtered data (CSV)",
-                       data=filtered.to_csv(index=False),
+    # number columns: mean, min, max...
+    st.markdown("**Number columns**")
+    st.dataframe(filtered[columns].describe().round(1), use_container_width=True)
+
+    # text and True/False columns: how many values, how many different values, the most common one
+    st.markdown("**Text and True/False columns**")
+    text_stats = filtered[columns].describe(include=["object", "bool"])
+    text_stats.index = ["count", "different values", "most common", "times of most common"]
+    st.dataframe(text_stats.astype(str), use_container_width=True)
+
+    st.download_button("Download filtered data (CSV)",
+                       data=filtered[columns].to_csv(index=False),
                        file_name="himalayan_expeditions_filtered.csv",
                        mime="text/csv")

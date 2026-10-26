@@ -57,6 +57,9 @@ h1, h2, h3 { font-family: 'Fraunces', serif !important; color: #13202F; }
     padding: 24px;
 }
 
+/* Hide the small link icon next to the titles */
+[data-testid="stHeaderActionElements"], .stHeadingContainer a, h1 a, h2 a, h3 a { display: none !important; }
+
 /* KPI cards */
 [data-testid="stMetric"] {
     background-color: #FFFFFF;
