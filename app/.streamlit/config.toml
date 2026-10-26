@@ -4,3 +4,10 @@ backgroundColor = "#F3F5F8"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#13202F"
 font = "sans serif"
+
+# Dark sidebar (the boxes, chips and toggle inside it use these colors)
+[theme.sidebar]
+primaryColor = "#E07A3F"
+backgroundColor = "#0E1A2B"
+secondaryBackgroundColor = "#1C2C42"
+textColor = "#E8ECF2"

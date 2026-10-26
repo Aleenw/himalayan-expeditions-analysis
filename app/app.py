@@ -4,7 +4,7 @@ import streamlit as st
 import plotly.express as px
 from sklearn.linear_model import LogisticRegression
 
-from style import CSS, HERO, ORANGE, BLUE, BRAND
+from style import CSS, HERO, BRAND, ABOUT, FILTERS_TITLE, team_title, ORANGE, BLUE
 
 # ---------- Page settings ----------
 st.set_page_config(page_title="Summit Planner", page_icon="🏔️", layout="wide")
@@ -45,34 +45,34 @@ model, model_columns = train_model(df)
 
 # ---------- Sidebar ----------
 st.sidebar.markdown(BRAND, unsafe_allow_html=True)
-
-with st.sidebar.expander("ℹ️ About this dashboard"):
-    st.write("A data dashboard for climbers planning a Himalayan expedition. "
-             "Explore which mountain, season, company and gear give you the best "
-             "chance to reach the summit safely.")
-    st.caption("Data: The Himalayan Database via TidyTuesday (2025-01-21). 868 expeditions, 2020–2024.")
+st.sidebar.markdown(ABOUT, unsafe_allow_html=True)
 
 st.sidebar.divider()
-st.sidebar.subheader("Filters")
+st.sidebar.markdown(FILTERS_TITLE, unsafe_allow_html=True)
+
 # 1) Mountain
 mountains = ["All mountains"] + list(df["peak"].value_counts().index)
 mountain = st.sidebar.selectbox("Mountain", mountains)
 
-# 2) Season
-seasons = st.sidebar.multiselect("Season", ["Spring", "Summer", "Autumn", "Winter"],
-                                 default=["Spring", "Summer", "Autumn", "Winter"])
+# 2) Season (chips)
+all_seasons = ["Spring", "Autumn", "Winter", "Summer"]
+seasons = st.sidebar.pills("Season", all_seasons, selection_mode="multi", default=all_seasons)
+if len(seasons) == 0:          # nothing selected = show all seasons
+    seasons = all_seasons
 
 # 3) Peak height
-heights = st.sidebar.multiselect("Peak height", ["Under 7,000 m", "7,000-8,000 m", "Over 8,000 m"],
-                                 default=["Under 7,000 m", "7,000-8,000 m", "Over 8,000 m"])
+height_choice = st.sidebar.selectbox("Peak height", ["All heights", "Under 7,000 m", "7,000-8,000 m", "Over 8,000 m"])
 
-# 4) Oxygen
-oxygen = st.sidebar.radio("Oxygen", ["All", "Used oxygen", "No oxygen"], horizontal=True)
+# 4) Oxygen (toggle)
+only_oxygen = st.sidebar.toggle("Only expeditions that used oxygen")
 
-# 5) Team size
+# 5) Team size (title on the left, range on the right)
 min_team = int(df["members"].min())
 max_team = int(df["members"].max())
-team = st.sidebar.slider("Team size (climbers)", min_team, max_team, (min_team, max_team))
+current = st.session_state.get("team", (min_team, max_team))
+st.sidebar.markdown(team_title(current[0], current[1]), unsafe_allow_html=True)
+team = st.sidebar.slider("Team size (climbers)", min_team, max_team, (min_team, max_team),
+                         key="team", label_visibility="collapsed")
 
 # ---------- Apply filters ----------
 filtered = df.copy()
@@ -81,12 +81,12 @@ if mountain != "All mountains":
     filtered = filtered[filtered["peak"] == mountain]
 
 filtered = filtered[filtered["season"].isin(seasons)]
-filtered = filtered[filtered["height_group"].isin(heights)]
 
-if oxygen == "Used oxygen":
+if height_choice != "All heights":
+    filtered = filtered[filtered["height_group"] == height_choice]
+
+if only_oxygen:
     filtered = filtered[filtered["oxygen_used"] == True]
-elif oxygen == "No oxygen":
-    filtered = filtered[filtered["oxygen_used"] == False]
 
 filtered = filtered[(filtered["members"] >= team[0]) & (filtered["members"] <= team[1])]
 
