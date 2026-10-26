@@ -12,6 +12,9 @@ CSS = """
 html, body, [class*="css"] { font-family: 'Source Sans 3', sans-serif; }
 h1, h2, h3 { font-family: 'Fraunces', serif !important; color: #13202F; }
 
+/* Less empty space at the top of the page */
+.block-container, [data-testid="stMainBlockContainer"] { padding-top: 3rem !important; }
+
 /* Sidebar: dark navy */
 [data-testid="stSidebar"] { background-color: #0E1A2B; }
 [data-testid="stSidebar"] * { color: #E8ECF2; }
@@ -41,6 +44,22 @@ h1, h2, h3 { font-family: 'Fraunces', serif !important; color: #13202F; }
     padding: 16px 20px;
 }
 [data-testid="stMetricValue"] { font-family: 'Fraunces', serif; }
+
+/* Custom KPI cards (same size, like the Figma design) */
+.kpi {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E7EE;
+    border-radius: 14px;
+    padding: 18px 20px;
+    height: 165px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+.kpi-bar { width: 28px; height: 4px; border-radius: 2px; margin-bottom: 14px; }
+.kpi p { margin: 0 !important; padding: 0 !important; }
+.kpi .kpi-label { font-size: 12px !important; font-weight: 600; letter-spacing: 1.5px; color: #607086; line-height: 1.3 !important; white-space: nowrap; }
+.kpi .kpi-value { font-family: 'Fraunces', serif; font-size: 42px !important; font-weight: 600; color: #13202F; line-height: 1.2 !important; margin: 4px 0 6px 0 !important; }
+.kpi .kpi-sub { font-size: 13px !important; color: #607086; line-height: 1.35 !important; }
 </style>
 """
 
@@ -82,6 +101,18 @@ def team_title(low, high):
 <div style="display:flex; justify-content:space-between; margin-bottom:-12px;">
 <span style="font-weight:600; color:#FFFFFF; font-size:15px;">Team size (climbers)</span>
 <span style="font-weight:600; color:#F2B35B; font-size:15px;">{low} – {high}</span>
+</div>
+"""
+
+
+# KPI card: colored bar, label, big number and a small explanation
+def kpi_card(label, value, sub, color):
+    return f"""
+<div class="kpi">
+<div class="kpi-bar" style="background-color:{color};"></div>
+<p class="kpi-label">{label}</p>
+<p class="kpi-value">{value}</p>
+<p class="kpi-sub">{sub}</p>
 </div>
 """
 

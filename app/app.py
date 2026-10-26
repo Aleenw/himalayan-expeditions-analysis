@@ -4,7 +4,7 @@ import streamlit as st
 import plotly.express as px
 from sklearn.linear_model import LogisticRegression
 
-from style import CSS, HERO, BRAND, ABOUT, FILTERS_TITLE, team_title, ORANGE, BLUE
+from style import CSS, HERO, BRAND, ABOUT, FILTERS_TITLE, team_title, kpi_card, ORANGE, BLUE
 
 # ---------- Page settings ----------
 st.set_page_config(page_title="Summit Planner", page_icon="🏔️", layout="wide")
@@ -99,27 +99,45 @@ if len(filtered) == 0:
 st.markdown(HERO, unsafe_allow_html=True)
 
 # ---------- KPI cards ----------
+total = len(df)
+n = len(filtered)
 all_success = df["success"].mean() * 100
 success = filtered["success"].mean() * 100
 death = filtered["any_death"].mean() * 100
-days = filtered["total_days"].median()
+oxygen_share = filtered["oxygen_used"].mean() * 100
+
+# card 1: number of expeditions
+if n == total:
+    sub1 = "All expeditions, 2020–2024"
+else:
+    sub1 = f"{n / total * 100:.0f}% of all {total} trips"
+
+# card 2: success rate (compare with all data when filtered)
+if n == total:
+    sub2 = f"{filtered['success'].sum()} teams reached the summit"
+else:
+    # round first, so the difference matches the numbers shown on the card
+    diff = round(success) - round(all_success)
+    sub2 = f"{diff:+d} pts vs all ({round(all_success)}%)"
+
+# card 3: deaths
+sub3 = f"{filtered['any_death'].sum()} trips had at least one death"
+
+# card 4: oxygen use (the most important factor)
+with_o2 = filtered[filtered["oxygen_used"] == True]
+without_o2 = filtered[filtered["oxygen_used"] == False]
+if len(with_o2) > 0 and len(without_o2) > 0:
+    sub4 = f"{with_o2['success'].mean() * 100:.0f}% success with O₂, {without_o2['success'].mean() * 100:.0f}% without"
+elif len(with_o2) > 0:
+    sub4 = "All these trips used oxygen"
+else:
+    sub4 = "None of these trips used oxygen"
 
 col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("Expeditions", len(filtered))
-
-if len(filtered) == len(df):
-    col2.metric("Success rate", f"{success:.0f}%")
-else:
-    col2.metric("Success rate", f"{success:.0f}%",
-                delta=f"{success - all_success:.0f} pts vs all")
-
-col3.metric("Expeditions with a death", f"{death:.1f}%")
-
-if pd.isna(days):
-    col4.metric("Median trip length", "No data")
-else:
-    col4.metric("Median trip length", f"{days:.0f} days")
+col1.markdown(kpi_card("EXPEDITIONS", n, sub1, ORANGE), unsafe_allow_html=True)
+col2.markdown(kpi_card("SUCCESS RATE", f"{success:.0f}%", sub2, "#2E8B6A"), unsafe_allow_html=True)
+col3.markdown(kpi_card("DEATH RISK", f"{death:.1f}%", sub3, "#C2483A"), unsafe_allow_html=True)
+col4.markdown(kpi_card("OXYGEN USE", f"{oxygen_share:.0f}%", sub4, BLUE), unsafe_allow_html=True)
 
 st.divider()
 
