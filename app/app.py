@@ -393,7 +393,7 @@ with tab1:
             fig.update_layout(xaxis_title="Number of Climbers", yaxis_title="Number of Hired Staff")
             show_chart(fig)
             st.markdown(note("There is a strong positive relationship between the number of climbers and the "
-                             "number of hired staff (correlation = 0.77): bigger teams hire more staff."),
+                             "number of hired staff (correlation = 0.79): bigger teams hire more staff."),
                         unsafe_allow_html=True)
 
     # ---------- Q6: How long will it take? ----------
