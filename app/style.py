@@ -117,6 +117,27 @@ def kpi_card(label, value, sub, color):
 """
 
 
+# Insight on top of a chart: big colored number + one sentence
+def insight(number, text, color):
+    return f"""
+<div style="border-left:4px solid {color}; background-color:#FFFFFF; border-radius:10px;
+padding:10px 16px; margin:4px 0 8px 0; display:flex; align-items:center; gap:14px;">
+<span style="font-family:Fraunces, serif; font-size:28px; font-weight:600; color:{color}; white-space:nowrap;">{number}</span>
+<span style="font-size:14px; color:#13202F; line-height:1.4;">{text}</span>
+</div>
+"""
+
+
+# Observation from the notebook, shown under a chart
+def note(text):
+    return f"""
+<div style="background-color:#EEF1F5; border-radius:10px; padding:12px 16px; margin:0 0 16px 0;">
+<p style="font-size:11px; font-weight:700; letter-spacing:1.5px; color:#607086; margin:0 0 4px 0;">FROM MY ANALYSIS (ALL 868 EXPEDITIONS)</p>
+<p style="font-size:14px; color:#13202F; line-height:1.5; margin:0;">{text}</p>
+</div>
+"""
+
+
 # Hero banner with mountains (same drawing as in Figma)
 HERO = """
 <div style="position:relative; height:240px; border-radius:20px; overflow:hidden; margin-bottom:24px;

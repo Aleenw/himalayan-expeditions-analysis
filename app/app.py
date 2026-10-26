@@ -4,7 +4,7 @@ import streamlit as st
 import plotly.express as px
 from sklearn.linear_model import LogisticRegression
 
-from style import CSS, HERO, BRAND, ABOUT, FILTERS_TITLE, team_title, kpi_card, ORANGE, BLUE
+from style import CSS, HERO, BRAND, ABOUT, FILTERS_TITLE, team_title, kpi_card, insight, note, ORANGE, BLUE
 
 # ---------- Page settings ----------
 st.set_page_config(page_title="Summit Planner", page_icon="🏔️", layout="wide")
@@ -42,6 +42,13 @@ def train_model(data):
 
 
 model, model_columns = train_model(df)
+
+
+# show a plotly chart with the numbers written straight, outside the bars
+def show_chart(fig):
+    if fig.data and fig.data[0].type == "bar":
+        fig.update_traces(textangle=0, textposition="outside", cliponaxis=False)
+    st.plotly_chart(fig, use_container_width=True)
 
 # ---------- Sidebar ----------
 st.sidebar.markdown(BRAND, unsafe_allow_html=True)
@@ -121,7 +128,12 @@ else:
     sub2 = f"{diff:+d} pts vs all ({round(all_success)}%)"
 
 # card 3: deaths
-sub3 = f"{filtered['any_death'].sum()} trips had at least one death"
+death_trips = filtered[filtered["any_death"] == True]
+if len(death_trips) > 0:
+    above_8000 = (death_trips["height_m"] >= 8000).mean() * 100
+    sub3 = f"{len(death_trips)} trips · {above_8000:.0f}% on 8,000 m peaks"
+else:
+    sub3 = "No deaths in these trips"
 
 # card 4: oxygen use (the most important factor)
 with_o2 = filtered[filtered["oxygen_used"] == True]
@@ -146,81 +158,283 @@ tab1, tab2, tab3 = st.tabs(["📊 Overview", "🧗 Check my plan", "🗂 Data"])
 
 # ===== Tab 1: Overview =====
 with tab1:
-    left, right = st.columns(2)
+    # The climber picks a question. The answer has 3 parts:
+    # 1) insight box (calculated from the filtered data, changes with the filters)
+    # 2) the chart(s) from the notebook
+    # 3) the observation I wrote in the notebook (about all 868 expeditions)
 
-    # ---- Chart 1: Oxygen ----
-    with left:
-        st.subheader("Oxygen is the biggest factor")
-        oxy = filtered.groupby("oxygen_used")["success"].mean().reset_index()
-        oxy["success"] = oxy["success"] * 100
+    questions = ["Which mountain?", "Which season?", "Should I bring oxygen?", "How big a team?",
+                 "How many guides?", "How long will it take?", "What could stop me?", "Which company?"]
+    question = st.pills("What do you want to know?", questions, selection_mode="single", default=questions[0])
+    if question is None:
+        question = questions[0]
+
+    st.subheader(question)
+
+    # ---------- Q1: Which mountain? (peak height) ----------
+    if question == "Which mountain?":
+        height = filtered.groupby("height_group", observed=True).agg(
+            success=("success", "mean"), deaths=("any_death", "mean"), trips=("success", "count")).reset_index()
+        height["success"] = height["success"] * 100
+        height["deaths"] = height["deaths"] * 100
+
+        high = height[height["height_group"] == "Over 8,000 m"]
+        low = filtered[filtered["height_m"] < 8000]
+        if len(high) > 0 and len(low) > 0:
+            st.markdown(insight(f"{high['deaths'].iloc[0]:.1f}%",
+                                f"of trips on 8,000 m peaks had a death, compared with "
+                                f"{low['any_death'].mean() * 100:.1f}% on lower peaks.", "#C2483A"),
+                        unsafe_allow_html=True)
+        else:
+            st.markdown(insight("—", "Only one height group with these filters, so we can't compare.", "#C2483A"),
+                        unsafe_allow_html=True)
+
+        left, right = st.columns(2)
+        with left:
+            fig = px.bar(height, x="height_group", y="success", text_auto=".0f", hover_data=["trips"],
+                         title="Success Rate by Peak Height", color_discrete_sequence=[BLUE])
+            fig.update_layout(xaxis_title="Peak Height", yaxis_title="Success rate (%)", yaxis_range=[0, 100])
+            show_chart(fig)
+            st.markdown(note("Peaks over 8,000 m have the highest success rate (75%), and the 7,000–8,000 m "
+                             "peaks have the lowest (50%). This does not mean the highest peaks are easier: "
+                             "most expeditions on 8,000 m peaks use oxygen."), unsafe_allow_html=True)
+        with right:
+            fig = px.bar(height, x="height_group", y="deaths", text_auto=".1f", hover_data=["trips"],
+                         title="Share of Expeditions With a Death, by Peak Height",
+                         color_discrete_sequence=["#C2483A"])
+            fig.update_layout(xaxis_title="Peak Height", yaxis_title="Expeditions with a death (%)")
+            show_chart(fig)
+            st.markdown(note("Peaks over 8,000 m are much more dangerous: 7.2% of expeditions there had at "
+                             "least one death, compared with about 1% on lower peaks. 34 of the 37 expeditions "
+                             "with a death were on 8,000 m peaks."), unsafe_allow_html=True)
+
+    # ---------- Q2: Which season? ----------
+    elif question == "Which season?":
+        season = filtered.groupby("season").agg(
+            success=("success", "mean"), deaths=("any_death", "mean"), trips=("success", "count")).reset_index()
+        season["success"] = season["success"] * 100
+        season["deaths"] = season["deaths"] * 100
+        order = {"season": ["Spring", "Summer", "Autumn", "Winter"]}
+
+        enough = season[season["trips"] >= 20]
+        if len(enough) > 0:
+            best = enough.sort_values("success", ascending=False).iloc[0]
+            worst = enough.sort_values("deaths", ascending=False).iloc[0]
+            if len(enough) == 1:
+                text = f"{best['success']:.0f}% success, and {best['deaths']:.1f}% of trips had a death."
+            elif best["season"] == worst["season"]:
+                text = f"has the highest success ({best['success']:.0f}%) but also the most deaths ({best['deaths']:.1f}%)."
+            else:
+                text = f"has the highest success ({best['success']:.0f}%). {worst['season']} has the most deaths ({worst['deaths']:.1f}%)."
+            st.markdown(insight(best["season"], text, "#2E8B6A"), unsafe_allow_html=True)
+        else:
+            st.markdown(insight("—", "Not enough trips in any season to compare.", "#2E8B6A"), unsafe_allow_html=True)
+
+        left, right = st.columns(2)
+        with left:
+            fig = px.bar(season, x="season", y="success", text_auto=".0f", hover_data=["trips"],
+                         category_orders=order, title="Success Rate by Season", color_discrete_sequence=[BLUE])
+            fig.update_layout(xaxis_title="Season", yaxis_title="Success rate (%)", yaxis_range=[0, 100])
+            show_chart(fig)
+            st.markdown(note("Spring has the highest success rate (76%), followed by autumn (66%). Winter is the "
+                             "hardest season, with only 33% success. Summer has only 5 expeditions, so we can't "
+                             "trust its rate."), unsafe_allow_html=True)
+        with right:
+            fig = px.bar(season, x="season", y="deaths", text_auto=".1f", hover_data=["trips"],
+                         category_orders=order, title="Share of Expeditions With a Death, by Season",
+                         color_discrete_sequence=["#C2483A"])
+            fig.update_layout(xaxis_title="Season", yaxis_title="Expeditions with a death (%)")
+            show_chart(fig)
+            st.markdown(note("Spring is the most dangerous season (6.4% of expeditions had a death vs 2.1% in "
+                             "autumn), even though it has the highest success rate. This is because most spring "
+                             "expeditions are on 8,000 m peaks (77%). Winter and summer have too few expeditions "
+                             "(21 and 5) to judge."), unsafe_allow_html=True)
+
+    # ---------- Q3: Should I bring oxygen? ----------
+    elif question == "Should I bring oxygen?":
+        oxy = filtered.groupby("oxygen_used")["success"].agg(["mean", "count"]).reset_index()
+        oxy["mean"] = oxy["mean"] * 100
         oxy["oxygen_used"] = oxy["oxygen_used"].map({True: "With oxygen", False: "Without oxygen"})
 
-        fig = px.bar(oxy, x="oxygen_used", y="success", color="oxygen_used", text_auto=".0f",
-                     color_discrete_map={"With oxygen": ORANGE, "Without oxygen": BLUE})
-        fig.update_layout(showlegend=False, xaxis_title="", yaxis_title="Success rate (%)", yaxis_range=[0, 100])
-        st.plotly_chart(fig, use_container_width=True)
-
-    # ---- Chart 2: Season ----
-    with right:
-        st.subheader("Success rate by season")
-        season = filtered.groupby("season")["success"].agg(["mean", "count"]).reset_index()
-        season["mean"] = season["mean"] * 100
-
-        fig = px.bar(season, x="season", y="mean", text_auto=".0f", hover_data=["count"],
-                     category_orders={"season": ["Spring", "Summer", "Autumn", "Winter"]},
-                     color_discrete_sequence=[BLUE])
-        fig.update_layout(xaxis_title="", yaxis_title="Success rate (%)", yaxis_range=[0, 100])
-        st.plotly_chart(fig, use_container_width=True)
-
-    left, right = st.columns(2)
-
-    # ---- Chart 3: Height x Oxygen ----
-    with left:
-        st.subheader("Success by peak height and oxygen")
         ho = filtered.groupby(["height_group", "oxygen_used"], observed=True)["success"].agg(["mean", "count"]).reset_index()
         ho["mean"] = ho["mean"] * 100
         ho["oxygen_used"] = ho["oxygen_used"].map({True: "With oxygen", False: "Without oxygen"})
 
-        fig = px.bar(ho, x="height_group", y="mean", color="oxygen_used", barmode="group",
-                     text_auto=".0f", hover_data=["count"],
-                     color_discrete_map={"With oxygen": ORANGE, "Without oxygen": BLUE})
-        fig.update_layout(xaxis_title="", yaxis_title="Success rate (%)", yaxis_range=[0, 100], legend_title="")
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption("Hover on a bar to see the number of trips. Bars with few trips are not reliable.")
+        high = ho[ho["height_group"] == "Over 8,000 m"]
+        if len(high) == 2:
+            no_o2 = high[high["oxygen_used"] == "Without oxygen"]["mean"].iloc[0]
+            yes_o2 = high[high["oxygen_used"] == "With oxygen"]["mean"].iloc[0]
+            st.markdown(insight(f"{no_o2:.0f}% → {yes_o2:.0f}%", "Above 8,000 m, oxygen changes everything.",
+                                ORANGE), unsafe_allow_html=True)
+        elif len(oxy) == 2:
+            no_o2 = oxy[oxy["oxygen_used"] == "Without oxygen"]["mean"].iloc[0]
+            yes_o2 = oxy[oxy["oxygen_used"] == "With oxygen"]["mean"].iloc[0]
+            st.markdown(insight(f"{no_o2:.0f}% → {yes_o2:.0f}%", "Success without oxygen vs with oxygen.",
+                                ORANGE), unsafe_allow_html=True)
+        else:
+            st.markdown(insight("—", "Only one group with these filters, so we can't compare oxygen.", ORANGE),
+                        unsafe_allow_html=True)
 
-    # ---- Chart 4: Companies ----
-    with right:
-        st.subheader("Success rate of companies")
+        left, right = st.columns(2)
+        with left:
+            fig = px.bar(oxy, x="oxygen_used", y="mean", color="oxygen_used", text_auto=".0f",
+                         hover_data=["count"], title="Success Rate With and Without Oxygen",
+                         color_discrete_map={"With oxygen": ORANGE, "Without oxygen": BLUE})
+            fig.update_layout(showlegend=False, xaxis_title="Oxygen Used", yaxis_title="Success rate (%)",
+                              yaxis_range=[0, 100])
+            show_chart(fig)
+            st.markdown(note("Oxygen has a big effect on success: 89% of expeditions with oxygen succeeded, "
+                             "compared with only 55% without oxygen."), unsafe_allow_html=True)
+        with right:
+            fig = px.bar(ho, x="height_group", y="mean", color="oxygen_used", barmode="group", text_auto=".0f",
+                         hover_data=["count"], title="Success Rate by Peak Height and Oxygen Use",
+                         color_discrete_map={"With oxygen": ORANGE, "Without oxygen": BLUE})
+            fig.update_layout(xaxis_title="Peak Height", yaxis_title="Success rate (%)", yaxis_range=[0, 100],
+                              legend_title="")
+            show_chart(fig)
+            st.markdown(note("Without oxygen, success goes down as the peak gets higher. The biggest effect of "
+                             "oxygen is on peaks over 8,000 m: only 14% of expeditions without oxygen succeeded, "
+                             "compared with 89% with oxygen. On lower peaks almost nobody uses oxygen (only 3 and "
+                             "10 expeditions), so we can't compare there."), unsafe_allow_html=True)
+
+    # ---------- Q4: How big a team? ----------
+    elif question == "How big a team?":
+        team_rate = filtered.groupby("team_size", observed=True)["success"].agg(["mean", "count"]).reset_index()
+        team_rate["mean"] = team_rate["mean"] * 100
+
+        enough = team_rate[team_rate["count"] >= 20]
+        if len(enough) > 0:
+            best = enough.sort_values("mean", ascending=False).iloc[0]
+            st.markdown(insight(f"{best['team_size']} climbers",
+                                f"is the most successful team size ({best['mean']:.0f}%).", BLUE),
+                        unsafe_allow_html=True)
+        else:
+            st.markdown(insight("—", "Not enough trips to compare team sizes.", BLUE), unsafe_allow_html=True)
+
+        fig = px.bar(team_rate, x="team_size", y="mean", text_auto=".0f", hover_data=["count"],
+                     title="Success Rate by Team Size", color_discrete_sequence=[BLUE])
+        fig.update_layout(xaxis_title="Team Size (Number of Climbers)", yaxis_title="Success rate (%)",
+                          yaxis_range=[0, 100])
+        show_chart(fig)
+        st.markdown(note("Bigger teams have higher success rates: from 57% for teams of 2–3 climbers to 88% for "
+                         "teams of 13 or more."), unsafe_allow_html=True)
+
+    # ---------- Q5: How many guides? ----------
+    elif question == "How many guides?":
+        guides = filtered.copy()
+        guides["has_guides"] = guides["hired_staff"] > 0
+        rate = guides.groupby("has_guides")["success"].agg(["mean", "count"]).reset_index()
+        rate["mean"] = rate["mean"] * 100
+        rate["has_guides"] = rate["has_guides"].map({True: "With hired staff", False: "No hired staff"})
+
+        if len(rate) == 2:
+            no_staff = rate[rate["has_guides"] == "No hired staff"]["mean"].iloc[0]
+            with_staff = rate[rate["has_guides"] == "With hired staff"]["mean"].iloc[0]
+            st.markdown(insight(f"{no_staff:.0f}% → {with_staff:.0f}%",
+                                "Success without hired staff vs with staff.", ORANGE), unsafe_allow_html=True)
+        else:
+            st.markdown(insight("—", "Only one group with these filters, so we can't compare.", ORANGE),
+                        unsafe_allow_html=True)
+
+        left, right = st.columns(2)
+        with left:
+            fig = px.bar(rate, x="has_guides", y="mean", text_auto=".0f", hover_data=["count"],
+                         title="Success Rate With and Without Hired Staff", color_discrete_sequence=[ORANGE])
+            fig.update_layout(xaxis_title="Has Hired Staff", yaxis_title="Success rate (%)", yaxis_range=[0, 100])
+            show_chart(fig)
+            st.markdown(note("Expeditions with hired staff succeeded 76% of the time, compared with only 43% for "
+                             "expeditions without staff."), unsafe_allow_html=True)
+        with right:
+            fig = px.scatter(filtered, x="members", y="hired_staff", title="Number of Climbers vs Hired Staff",
+                             opacity=0.6, color_discrete_sequence=[BLUE])
+            fig.update_layout(xaxis_title="Number of Climbers", yaxis_title="Number of Hired Staff")
+            show_chart(fig)
+            st.markdown(note("There is a strong positive relationship between the number of climbers and the "
+                             "number of hired staff (correlation = 0.77): bigger teams hire more staff."),
+                        unsafe_allow_html=True)
+
+    # ---------- Q6: How long will it take? ----------
+    elif question == "How long will it take?":
+        days = filtered.groupby("peak")["total_days"].agg(["median", "count"]).reset_index()
+        days = days[days["count"] >= 10].sort_values("median")
+
+        if len(days) == 0:
+            st.markdown(insight("—", "Not enough trips with known dates for these filters.", BLUE),
+                        unsafe_allow_html=True)
+        else:
+            short = days.iloc[0]
+            long = days.iloc[-1]
+            if len(days) == 1:
+                st.markdown(insight(f"{short['median']:.0f} days", f"Typical trip length on {short['peak']}.", BLUE),
+                            unsafe_allow_html=True)
+            else:
+                st.markdown(insight(f"{short['median']:.0f} → {long['median']:.0f} days",
+                                    f"From {short['peak']} (shortest) to {long['peak']} (longest).", BLUE),
+                            unsafe_allow_html=True)
+            fig = px.bar(days, x="median", y="peak", orientation="h", text_auto=".0f", hover_data=["count"],
+                         title="Typical Trip Length on the Most Climbed Mountains", color_discrete_sequence=[BLUE])
+            fig.update_layout(xaxis_title="Median number of days", yaxis_title="Mountain")
+            show_chart(fig)
+        st.markdown(note("I only included mountains with at least 10 expeditions with known trip length. Ama "
+                         "Dablam is the shortest trip (about 13 days), while Everest and Lhotse are the longest "
+                         "(about 34–35 days). Higher mountains need longer trips."), unsafe_allow_html=True)
+
+    # ---------- Q7: What could stop me? ----------
+    elif question == "What could stop me?":
+        failed = filtered[filtered["success"] == False]
+        if len(failed) == 0:
+            st.markdown(insight("0", "No failed expeditions with these filters.", "#C2483A"), unsafe_allow_html=True)
+        else:
+            nature = failed["end_reason"].str.startswith(("Bad weather", "Bad conditions")).mean() * 100
+            st.markdown(insight(f"{nature:.0f}%", "of failed expeditions were stopped by nature: bad weather or "
+                                                  "bad conditions (snow, avalanches).", "#C2483A"),
+                        unsafe_allow_html=True)
+            reasons = failed["end_reason"].value_counts().reset_index()
+            reasons.columns = ["reason", "trips"]
+            reasons = reasons.sort_values("trips")
+            fig = px.bar(reasons, x="trips", y="reason", orientation="h", text_auto=True,
+                         title="Why Expeditions Failed", color_discrete_sequence=["#C2483A"])
+            fig.update_layout(xaxis_title="Number of Expeditions", yaxis_title="Reason", height=500)
+            show_chart(fig)
+        st.markdown(note("About half of the failed expeditions (132 of 257) failed because of nature: bad weather "
+                         "or bad conditions. \"Success (subpeak)\" means the team reached a lower summit, not the "
+                         "main one."), unsafe_allow_html=True)
+
+    # ---------- Q8: Which company? ----------
+    else:
         agencies = filtered[filtered["agency"] != "Unknown"]
         company = agencies.groupby("agency")["success"].agg(["mean", "count"]).reset_index()
-        company = company[company["count"] >= 10].sort_values("mean")
-        company["mean"] = company["mean"] * 100
+        company = company[company["count"] >= 20].copy()
 
         if len(company) == 0:
-            st.info("No company has 10 or more expeditions with these filters.")
+            st.markdown(insight("—", "No company has 20 or more expeditions with these filters.", BLUE),
+                        unsafe_allow_html=True)
         else:
+            company["mean"] = company["mean"] * 100
+            company = company.sort_values("mean", ascending=False)
+            company["rank"] = range(1, len(company) + 1)
+            largest = company.sort_values("count", ascending=False).iloc[0]
+            if len(company) == 1:
+                text = f"Only {largest['agency']} has 20 or more trips with these filters."
+            elif largest["rank"] == 1:
+                text = f"{largest['agency']} has the most trips ({largest['count']}) and the highest success."
+            else:
+                text = f"{largest['agency']} has the most trips ({largest['count']}) but is not the most successful."
+            st.markdown(insight(f"#{largest['rank']} of {len(company)}", text, BLUE), unsafe_allow_html=True)
+
+            company["highlight"] = "Other"
+            company.loc[company["agency"] == largest["agency"], "highlight"] = "Largest"
+            company = company.sort_values("mean")
             fig = px.bar(company, x="mean", y="agency", orientation="h", text_auto=".0f",
-                         hover_data=["count"], color_discrete_sequence=[ORANGE])
-            fig.update_layout(xaxis_title="Success rate (%)", yaxis_title="", xaxis_range=[0, 100])
-            st.plotly_chart(fig, use_container_width=True)
-            st.caption("Only companies with 10 or more expeditions.")
-
-    # ---- Key insights ----
-    st.divider()
-    st.subheader("💡 Key insights")
-
-    i1, i2, i3, i4 = st.columns(4)
-    i1.metric("Oxygen", "+34 pts", help="Success with oxygen 89% vs 55% without")
-    i1.caption("Oxygen raises success from 55% to 89%.")
-
-    i2.metric("Best season", "Spring", help="76% success in spring")
-    i2.caption("Spring has the highest success rate (76%).")
-
-    i3.metric("Deaths above 8,000 m", "92%", help="34 of 37 expeditions with a death")
-    i3.caption("Almost all expeditions with a death were on 8,000 m peaks.")
-
-    i4.metric("Largest company", "9th", help="Seven Summit Treks: 119 trips, 71% success")
-    i4.caption("The biggest company is not the most successful.")
+                         hover_data={"count": True, "highlight": False}, title="Success Rate of the Main Climbing Companies",
+                         color="highlight", color_discrete_map={"Largest": BLUE, "Other": ORANGE})
+            fig.update_layout(showlegend=False, xaxis_title="Success rate (%)", yaxis_title="Company",
+                              xaxis_range=[0, 100])
+            show_chart(fig)
+        st.markdown(note("I only included companies with at least 20 expeditions, because a success rate from a "
+                         "few trips can be misleading. Elite Exped has the highest success rate (90%). The biggest "
+                         "company, Seven Summit Treks (119 expeditions), is only 9th (71%), so the biggest is not "
+                         "always the best."), unsafe_allow_html=True)
 
 # ===== Tab 2: Check my plan =====
 with tab2:
