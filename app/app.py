@@ -496,11 +496,6 @@ with tab2:
             p_members = c1.number_input("Team size (climbers)", min_value=1, max_value=40, value=8)
             p_staff = c2.number_input("Hired staff", min_value=0, max_value=60, value=10)
 
-            # companies with 5 or more trips (sorted by number of trips)
-            company_counts = df[df["agency"] != "Unknown"]["agency"].value_counts()
-            companies = ["Not decided yet"] + list(company_counts[company_counts >= 5].index)
-            p_company = c1.selectbox("Company", companies)
-
             p_oxygen = st.toggle("I will use supplemental oxygen", value=True)
             submitted = st.form_submit_button("Check my plan →", type="primary")
 
@@ -556,11 +551,6 @@ with tab2:
                 tips.append(("good", f"{len(similar)} similar past trips: {similar['success'].mean() * 100:.0f}% reached the summit"))
             elif len(similar) > 0:
                 tips.append(("warn", f"Only {len(similar)} similar past trip(s), so we can't compare much"))
-
-            if p_company != "Not decided yet":
-                trips = df[df["agency"] == p_company]
-                tips.append(("good", f"{p_company}: {len(trips)} past trips, {trips['success'].mean() * 100:.0f}% "
-                                     f"reached the summit, {trips['any_death'].mean() * 100:.0f}% had a death"))
 
             if height >= 8000:
                 tips.append(("bad", "8,000 m peaks are riskier: 7.2% of trips had a death"))

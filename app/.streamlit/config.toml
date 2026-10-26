@@ -1,9 +1,12 @@
 [theme]
 primaryColor = "#E07A3F"
 backgroundColor = "#F3F5F8"
-secondaryBackgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#EEF1F5"
 textColor = "#13202F"
 font = "sans serif"
+# boxes (select, number input) get a light grey color and a thin border
+borderColor = "#D5DCE5"
+showWidgetBorder = true
 
 # Dark sidebar (the boxes, chips and toggle inside it use these colors)
 [theme.sidebar]
@@ -11,3 +14,4 @@ primaryColor = "#E07A3F"
 backgroundColor = "#0E1A2B"
 secondaryBackgroundColor = "#1C2C42"
 textColor = "#E8ECF2"
+borderColor = "#2A3D57"
